@@ -1,0 +1,38 @@
+#!/bin/sh
+
+cp ../Data/EXPEQ_EXAMPLE EXPEQ
+
+cat >datain <<'EOF'
+***                                                                             
+***    Example Torus                                               
+***                                                                             
+***                                                                             
+ &EQDATA                                                                        
+   NEQDSK=0, NSURF=6, NTCASE=0,
+   NBLOPT=0, NBSOPT=0, CPRESS=1.000, CFBAL=1.0000,
+   NCSCAL = 2, CSSPEC=0.000, QSPEC =1.6185,
+   NTMF0=0,CURRT = 0.3000,
+   NSTTP=2, NFUNC = 4, NIPR=1, NISO=100,
+   NPPFUN=4, NPP=1, NPPR=30,
+   NSOUR=2, NPROPT = 2,
+   NS=60, NT=60, NPSI=240, NCHI= 200,
+   NV=160, REXT=6.0, NVEXP=8, R0W=0.90, RZ0W=0.0,
+   NMESHA=3, SOLPDA=0.60, QWIDTH0=0.40, ROTE=0.0000, NTOR=1,
+   NPOIDQ=5, QSHAVE=100.0,
+   QPLACE(1)= 2.0000, 3.0000, 4.0000, 5.0000, 6.0000, 7.0000, 8.0000,
+   QWIDTH(1)= 0.0100, 0.0080, 0.0060, 0.0040, 0.0020, 0.0010, 0.0010,
+   NEGP=-1,  NER=1,
+   EPSLON=1.0E-10, GAMMA=1.6666666667,
+   MSMAX=40, NINMAP=50, NINSCA=50,
+   NOPT = 0, NPLOT=1, NBAL=0,
+   B0EXP=1.5, R0EXP=3.0,
+ &END                                                                           
+EOF
+rm OUT*MAR
+../../CheaseMerge/chease.x < datain  > log_chease
+grep GEXP log_chease
+grep Q_ZERO log_chease
+grep Q_EDGE log_chease
+
+echo 'CHEASE RUN FINISHED.'
+exit

@@ -1,0 +1,24 @@
+#!/bin/sh
+set -e
+
+# g-file contents, but this CHEASE-MARS expects the filename "EXPEQ" (manual) :contentReference[oaicite:1]{index=1}
+cp -f g028957.004300 EXPEQ
+
+cat > datain <<'EOF'
+&EQDATA
+  NEQDSK=1, NIDEAL=0, NSURF=6, NTCASE=0,
+  ... (rest of your EQDATA) ...
+&END
+&NEWRUN
+&END
+
+EOF
+
+rm -f OUT*MAR log_chease
+../../../CheaseMerge/chease.x < datain > log_chease 2>&1
+
+# quick checks
+grep -n "&NEWRUN" -n log_chease | head -n 5 || true
+grep -n "EQDSK" log_chease | head -n 50 || true
+ls -l OUTRMAR OUTVMAR 2>/dev/null || true
+tail -n 60 log_chease
