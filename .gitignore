@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Fortran / C build
+*.o
+*.mod
+*.a
+*.so
+*.exe
+
+# MARS / CHEASE outputs
+*.OUT
+*.out
+*.dat
+*.vtk
+*.plt
+*.log
+
+# Large generated directories
+RZplot/
+Data/
+Output/
+
+
+# OS junk
+.DS_Store
