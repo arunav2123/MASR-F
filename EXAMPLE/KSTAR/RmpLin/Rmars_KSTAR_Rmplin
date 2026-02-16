@@ -1,0 +1,339 @@
+#!/bin/bash
+# ============================================================
+#  MARS-F RmpLin for KSTAR 28957, n=1
+#  Three-stage workflow: _temp → _vac → _pls
+# ============================================================
+
+MARSF=../../../MarsQ_2FK/marsq.x
+MARSQ=../../../MarsQ_2FK/marsq.x   # if available
+
+# ---- Shared namelist blocks (heredoc variables) ----
+
+read -r -d '' BASIC_BLOCK <<'BLOCK'
+&BASIC
+ NCASE  = 2,
+ TALPHA1= (0.00000E-00, 0.00000E-00),
+ NITMAX = 1,
+ NSWEEP = 1,
+ GAMMA  = 1.66667,
+ RNTOR  =-1.,
+ M1     =-29,
+ M2     = 29,
+ NPROFN = 4,
+ NPROFIE= 0,
+ NPROFT = 3,
+ ETA    = 1.0e-07,
+ NV     = 160,
+ NWALL  = 1,
+ TAUW   = 1.0e+4,
+ IWALL  = 23,
+ IWO    = 1,
+ IVISC  = 1,
+ PVISC  = 1.5,
+ NPROFR = 4,
+ ROTE   = 1.00e-02,
+ FRACPTH= 1.0,
+&END
+BLOCK
+
+# FEEDBACK block for _temp and _vac (INCFEED=4)
+# 3-row KSTAR IVCC: top, mid, bot  →  6 filaments (upper/lower per row)
+# Adjust NCOIL, FCCHI, FWCHI etc. once you have exact coil geometry
+read -r -d '' FEEDBACK_TEMP <<'BLOCK'
+&FEEDBACK
+ INCFEED= 4,
+ NCOIL  = 2,
+ FCCHI  = 0.3,-0.3,
+ FWCHI  = 0.2, 0.2,
+ SCCHI  = 0.0, 0.0,
+ SWCHI  = 0.05,0.05,
+ BTCHI  = 0.05,
+ FEEDI  = (1.0e-3,0.0),(-1.0e-3,0.0),
+ IFEED  = 22,
+ ISENS  = 22,
+ NSENS  = 0,
+ KKF    =-1,
+ KREADECA = 0,
+&END
+BLOCK
+
+# FEEDBACK block for _pls (INCFEED=8 → plasma response)
+read -r -d '' FEEDBACK_PLS <<'BLOCK'
+&FEEDBACK
+ INCFEED= 8,
+ NCOIL  = 2,
+ FCCHI  = 0.3,-0.3,
+ FWCHI  = 0.2, 0.2,
+ SCCHI  = 0.0, 0.0,
+ SWCHI  = 0.05,0.05,
+ BTCHI  = 0.05,
+ FEEDI  = (1.0e-3,0.0),(-1.0e-3,0.0),
+ IFEED  = 22,
+ ISENS  = 22,
+ NSENS  = 0,
+ KKF    =-1,
+ KREADECA = 0,
+&END
+BLOCK
+
+read -r -d '' KINETIC_BLOCK <<'BLOCK'
+&KINETIC
+ INCKIN = 0,
+&END
+BLOCK
+
+read -r -d '' QLIN_BLOCK <<'BLOCK'
+&QLIN
+ TALPHA2= 1.0,
+ TALPHA3= 1.0,
+ TALPHA6= 1.0,
+ TALPHA8= 0.9,
+ TDELTAMIN = 0.04,
+ TDELTAMAX = 0.08,
+ TDELTALIM = 100.,
+ TDELTALOW = 2.,
+ CTJXB  = 1.0,
+ CTNTV  = 1.0,
+ CTREY  = 1.0,
+ ITSATURAT = 2,
+ NPROFVD= 3,
+ TCHIM0 = 8.4571e-07,
+ NPROFVP= 0,
+ TVPINCH0 = 0.,
+ CTEDGE   = 0.995,
+ KSOLSAVE = 0,
+ KSOLREAD = 0,
+&END
+BLOCK
+
+read -r -d '' OUTOPT_BLOCK <<'BLOCK'
+&OUTOPT
+ DPLOLP(1) = .T.,.F.,.F., .T.,.F.,.F., .F.,.F.,.F., .F.,.F.,.F.,.F.,.F.,.F.,.F.,.F.,
+ JSOUT    = 50,
+ ORMIN    = 0.0,
+ ORMAX    = 2.0,
+ OZMIN    =-2.0,
+ OZMAX    = 2.0,
+ NORR     = 0,
+ NOZZ     = 0,
+&END
+BLOCK
+
+# ============================================================
+#  _temp:  Coordinate conversion (2 sub-steps)
+#          Step A: NCONVB1=1, NCONVCS=0  →  PANGLE.OUT → PANGLE_PEST
+#          Step B: NCONVB1=1, NCONVCS=1  →  PANGLE.OUT → PANGLE_GEOM
+# ============================================================
+run_temp() {
+  echo "======================================="
+  echo "  _temp: Coordinate conversion"
+  echo "======================================="
+
+  cp ../Equi/OUTRMAR_PEST OUTRMAR
+  cp ../Equi/OUTVMAR_PEST OUTVMAR
+  cp ../Data/PROFDEN_KSTAR.IN  PROFDEN.IN
+  cp ../Data/PROFROT_KSTAR.IN  PROFROT.IN
+
+  # --- Step A: PEST angle (NCONVCS=0) ---
+  echo ""
+  echo "--- _temp step A: NCONVB1=1, NCONVCS=0 (PEST) ---"
+  rm -f *.OUT 2>/dev/null
+
+  cat > RUN.IN <<RUNEOF
+$BASIC_BLOCK
+$FEEDBACK_TEMP
+$KINETIC_BLOCK
+$QLIN_BLOCK
+&NUMERIC
+ PTRAPI = 1.00,
+ PTRAPH = 0.90,
+ NRES   = 7,
+ NFIT   = 3,
+ NTORQ  = 5,
+ IPDIVB = 1,
+ NCONVB1= 1,
+ NCONVCS= 0,
+ IOMPNUM= 1,
+ NVACJ  = 0,
+ V2XKEY = 2,
+&END
+$OUTOPT_BLOCK
+RUNEOF
+
+  time $MARSF > log_mars_temp_A 2>&1
+
+  if [ -f PANGLE.OUT ]; then
+    cp PANGLE.OUT ../Data/PANGLE_KSTAR28957_PEST
+    cp PANGLE.OUT PANGLE_PEST.IN
+    echo "  PANGLE.OUT → PANGLE_PEST.IN  ($(wc -l < PANGLE.OUT) lines)"
+  else
+    echo "  ERROR: PANGLE.OUT not produced. Check log_mars_temp_A"
+    tail -20 log_mars_temp_A
+    return 1
+  fi
+
+  # --- Step B: Geometric angle (NCONVCS=1) ---
+  echo ""
+  echo "--- _temp step B: NCONVB1=1, NCONVCS=1 (GEOM) ---"
+  cp ../Equi/OUTRMAR_PEST OUTRMAR
+  cp ../Equi/OUTVMAR_PEST OUTVMAR
+  rm -f *.OUT 2>/dev/null
+
+  cat > RUN.IN <<RUNEOF
+$BASIC_BLOCK
+$FEEDBACK_TEMP
+$KINETIC_BLOCK
+$QLIN_BLOCK
+&NUMERIC
+ PTRAPI = 1.00,
+ PTRAPH = 0.90,
+ NRES   = 7,
+ NFIT   = 3,
+ NTORQ  = 5,
+ IPDIVB = 1,
+ NCONVB1= 1,
+ NCONVCS= 1,
+ IOMPNUM= 1,
+ NVACJ  = 0,
+ V2XKEY = 2,
+&END
+$OUTOPT_BLOCK
+RUNEOF
+
+  time $MARSF > log_mars_temp_B 2>&1
+
+  if [ -f PANGLE.OUT ]; then
+    cp PANGLE.OUT ../Data/PANGLE_KSTAR28957_GEOM
+    cp PANGLE.OUT PANGLE_EQAC.IN
+    echo "  PANGLE.OUT → PANGLE_EQAC.IN  ($(wc -l < PANGLE.OUT) lines)"
+  else
+    echo "  ERROR: PANGLE.OUT not produced. Check log_mars_temp_B"
+    tail -20 log_mars_temp_B
+    return 1
+  fi
+
+  rm -f OUTRMAR OUTVMAR
+  echo ""
+  echo "  _temp DONE. Both PANGLE files saved."
+}
+
+# ============================================================
+#  _vac:  Vacuum RMP field
+#         NCONVB1=2, NCONVCS=1, INCFEED=4
+# ============================================================
+run_vac() {
+  echo "======================================="
+  echo "  _vac: Vacuum RMP (INCFEED=4)"
+  echo "======================================="
+
+  cp ../Equi/OUTRMAR_PEST OUTRMAR
+  cp ../Equi/OUTVMAR_PEST OUTVMAR
+  cp ../Data/PROFDEN_KSTAR.IN  PROFDEN.IN
+  cp ../Data/PROFROT_KSTAR.IN  PROFROT.IN
+  # PANGLE files should already be in place from _temp
+  [ ! -f PANGLE_PEST.IN ]  && cp ../Data/PANGLE_KSTAR28957_PEST PANGLE_PEST.IN
+  [ ! -f PANGLE_EQAC.IN ]  && cp ../Data/PANGLE_KSTAR28957_GEOM PANGLE_EQAC.IN
+  rm -f *.OUT 2>/dev/null
+
+  cat > RUN.IN <<RUNEOF
+$BASIC_BLOCK
+$FEEDBACK_TEMP
+$KINETIC_BLOCK
+$QLIN_BLOCK
+&NUMERIC
+ PTRAPI = 1.00,
+ PTRAPH = 0.90,
+ NRES   = 7,
+ NFIT   = 3,
+ NTORQ  = 5,
+ IPDIVB = 1,
+ NCONVB1= 2,
+ NCONVCS= 1,
+ IOMPNUM= 1,
+ NVACJ  = 0,
+ V2XKEY = 2,
+&END
+$OUTOPT_BLOCK
+RUNEOF
+
+  time $MARSF > log_mars_vac 2>&1
+
+  echo "  _vac DONE. Check log_mars_vac"
+  rm -f OUTRMAR OUTVMAR
+}
+
+# ============================================================
+#  _pls:  Plasma response
+#         NCONVB1=2, NCONVCS=1, INCFEED=8
+# ============================================================
+run_pls() {
+  echo "======================================="
+  echo "  _pls: Plasma response (INCFEED=8)"
+  echo "======================================="
+
+  cp ../Equi/OUTRMAR_PEST OUTRMAR
+  cp ../Equi/OUTVMAR_PEST OUTVMAR
+  cp ../Data/PROFDEN_KSTAR.IN  PROFDEN.IN
+  cp ../Data/PROFROT_KSTAR.IN  PROFROT.IN
+  [ ! -f PANGLE_PEST.IN ]  && cp ../Data/PANGLE_KSTAR28957_PEST PANGLE_PEST.IN
+  [ ! -f PANGLE_EQAC.IN ]  && cp ../Data/PANGLE_KSTAR28957_GEOM PANGLE_EQAC.IN
+  rm -f *.OUT 2>/dev/null
+
+  cat > RUN.IN <<RUNEOF
+$BASIC_BLOCK
+$FEEDBACK_PLS
+$KINETIC_BLOCK
+$QLIN_BLOCK
+&NUMERIC
+ PTRAPI = 1.00,
+ PTRAPH = 0.90,
+ NRES   = 7,
+ NFIT   = 3,
+ NTORQ  = 5,
+ IPDIVB = 1,
+ NCONVB1= 2,
+ NCONVCS= 1,
+ IOMPNUM= 1,
+ NVACJ  = 0,
+ V2XKEY = 2,
+&END
+$OUTOPT_BLOCK
+RUNEOF
+
+  # Prefer marsq.x for kinetic plasma response if available
+  if [ -x "$MARSQ" ]; then
+    echo "  Using marsq.x (kinetic MHD)"
+    time $MARSQ > log_mars_pls 2>&1
+  else
+    echo "  Using marsf.x (fluid MHD)"
+    time $MARSF > log_mars_pls 2>&1
+  fi
+
+  echo "  _pls DONE. Check log_mars_pls"
+  rm -f OUTRMAR OUTVMAR
+}
+
+# ============================================================
+#  Main — run all three in sequence
+# ============================================================
+echo "MARS-F RmpLin for KSTAR 28957 (n=1)"
+echo "Date: $(date)"
+echo ""
+
+run_temp || exit 1
+run_vac
+run_pls
+
+echo ""
+echo "========================================="
+echo "  All RmpLin stages complete"
+echo "========================================="
+echo "  Logs: log_mars_temp_{A,B}, log_mars_vac, log_mars_pls"
+echo ""
+echo "  Key outputs to check:"
+echo "    grep 'b1_res' log_mars_vac   → vacuum resonant field"
+echo "    grep 'b1_res' log_mars_pls   → total (vac+plasma) resonant field"
+echo "    diff between them = plasma amplification/screening"
+echo ""
+echo "  For coil phasing scan, modify FEEDI in _pls:"
+echo "    e.g. Dphi_UL=90deg: FEEDI = (1e-3,0.0),(0.0,1e-3)"

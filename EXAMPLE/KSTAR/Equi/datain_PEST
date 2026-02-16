@@ -1,0 +1,28 @@
+***                                                                             
+***    KSTAR 28957: PANGLE — PEST coords (NEGP=0, NER=2)                         
+***                                                                             
+***                                                                             
+ &EQDATA                                                                        
+   NBLOPT=0, CFBAL=1.00000, NEQDSK=0,
+   NIDEAL=0, NSURF=6, NTCASE=0, NSYM=0,
+   NCSCAL=2, CURRT=0.20914, CSSPEC=0.000,
+   CPRESS=1.00, PSISCL=1.00,
+   NSTTP=2, NFUNC=4, NIPR=1, NISO=240,
+   NPPFUN=4, NPP=1, NPPR=30,
+   NSOUR=2, NPROPT=2,
+   NSMOOTH=0, NDIFPS=1, NDIFT=1,
+   NS=60, NT=60, NPSI=240, NCHI=200,
+   NV=160, NVEXP=0, REXT=5.0, R0W=0.90, RZ0W=0.0,
+   NMESHA=3, SOLPDA=0.50, QWIDTH0=0.40, ROTE=0.0000, NTOR=1,
+   NPOIDQ=5, QSHAVE=100.0,
+   QPLACE(1)=2.0,3.0,4.0,5.0,6.0,7.0,8.0,
+   QWIDTH(1)=0.0100,0.0080,0.0060,0.0040,0.0020,0.0010,0.0010,
+   NEGP=0, NER=2,
+   EPSLON=1.0E-10, GAMMA=1.6666666667,
+   MSMAX=40, NINMAP=20, NINSCA=50,
+   NTURN=10, NBLC0=1,
+   NOPT=0, NPLOT=1, NBAL=0, NTMF0=0, NRSCAL=0,
+   B0EXP=1.69271887, R0EXP=1.80,
+ &END                                                                           
+ &NEWRUN
+ &END

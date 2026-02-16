@@ -1,0 +1,27 @@
+***                                                                             
+***    KSTAR 28957: Pass 1 — gEQDSK -> EXPEQ.OUT (no vacuum)                     
+***                                                                             
+***                                                                             
+ &EQDATA                                                                        
+   NEQDSK=1, NIDEAL=0, NSURF=1, NTCASE=0,
+   NBLOPT=0, NBSOPT=0, CPRESS=1.000, CFBAL=1.0000,
+   NCSCAL=4,
+   NTMF0=0,
+   NSTTP=2, NFUNC=4, NIPR=1, NISO=100,
+   NPPFUN=4, NPP=1, NPPR=30,
+   NSOUR=2, NPROPT=2,
+   NSMOOTH=0,
+   NS=46, NT=46, NPSI=240, NCHI=92,
+   NV=184, REXT=3.0, NVEXP=2, R0W=0.90, RZ0W=0.0,
+   NMESHA=3, SOLPDA=0.50, QWIDTH0=0.40, ROTE=0.0000, NTOR=1,
+   NPOIDQ=5, QSHAVE=100.0,
+   QPLACE(1)=2.0,3.0,4.0,5.0,6.0,7.0,8.0,
+   QWIDTH(1)=0.0100,0.0080,0.0060,0.0040,0.0020,0.0010,0.0010,
+   NEGP=0, NER=2,
+   EPSLON=1.0E-9, GAMMA=1.6666666667,
+   MSMAX=22, NINMAP=100, NINSCA=100,
+   NOPT=0, NPLOT=1, NBAL=0,
+   B0EXP=1.69271887, R0EXP=1.80,
+ &END                                                                           
+ &NEWRUN
+ &END

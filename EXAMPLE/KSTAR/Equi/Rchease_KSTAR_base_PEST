@@ -1,24 +1,226 @@
 #!/bin/sh
-set -e
+set -euo pipefail
 
-# g-file contents, but this CHEASE-MARS expects the filename "EXPEQ" (manual) :contentReference[oaicite:1]{index=1}
-cp -f g028957.004300 EXPEQ
+CHEASE="../../../CheaseMerge/chease.x"
+GFILE_ORIG="g028957.004300"
+GFILE_FIXED="g028957_fixed.004300"
+GFILE_SMOOTH="g028957_smooth.004300"
 
-cat > datain <<'EOF'
-&EQDATA
-  NEQDSK=1, NIDEAL=0, NSURF=6, NTCASE=0,
-  ... (rest of your EQDATA) ...
-&END
-&NEWRUN
-&END
+# ---- Step 0a: Fix field signs if needed ----
+if [ ! -f "$GFILE_FIXED" ]; then
+  echo "=== Step 0a: Fix Bt/Ip/fpol signs ==="
+  python3 fix_gfile_field_signs.py "$GFILE_ORIG" "$GFILE_FIXED"
+fi
 
+# ---- Step 0b: Smooth boundary to remove X-point cusp ----
+if [ ! -f "$GFILE_SMOOTH" ]; then
+  echo "=== Step 0b: Fourier-smooth boundary (removes X-point cusp) ==="
+  python3 smooth_gfile_boundary.py "$GFILE_FIXED" 8 "$GFILE_SMOOTH"
+fi
+
+# ---- Single pass: NEQDSK=1, NSURF=6 (following expert D3D pattern) ----
+cp -f "$GFILE_SMOOTH" EXPEQ
+
+cat > datain_PEST <<'EOF'
+***                                                                             
+***    KSTAR 28957 (PEST) gEQDSK -> OUT*MAR                                      
+***                                                                             
+***                                                                             
+ &EQDATA                                                                        
+   NBLOPT=0, CFBAL=1.00000, NEQDSK=1,
+   NIDEAL=0, NSURF=6, NTCASE=0, NSYM=0,
+   NCSCAL=2, CURRT=0.20914, CSSPEC=0.000,
+   CPRESS=1.00, PSISCL=1.00,
+   NSTTP=2, NFUNC=4, NIPR=1, NISO=240,
+   NPPFUN=4, NPP=1, NPPR=30,
+   NSOUR=2, NPROPT=2,
+   NSMOOTH=0, NDIFPS=1, NDIFT=1,
+   NS=60, NT=60, NPSI=240, NCHI=200,
+   NV=160, NVEXP=0, REXT=5.0, R0W=0.90, RZ0W=0.0,
+   NMESHA=3, SOLPDA=0.50, QWIDTH0=0.40, ROTE=0.0000, NTOR=1,
+   NPOIDQ=5, QSHAVE=100.0,
+   QPLACE(1)=2.0,3.0,4.0,5.0,6.0,7.0,8.0,
+   QWIDTH(1)=0.0100,0.0080,0.0060,0.0040,0.0020,0.0010,0.0010,
+   NEGP=0, NER=2,
+   EPSLON=1.0E-10, GAMMA=1.6666666667,
+   MSMAX=40, NINMAP=20, NINSCA=50,
+   NTURN=10, NBLC0=1,
+   NOPT=0, NPLOT=0, NBAL=0, NTMF0=0, NRSCAL=0,
+   B0EXP=1.69271887, R0EXP=1.80,
+ &END                                                                           
+ &NEWRUN
+ &END
 EOF
 
-rm -f OUT*MAR log_chease
-../../../CheaseMerge/chease.x < datain > log_chease 2>&1
+rm -f OUTRMAR OUTVMAR EXPEQ.OUT log_chease_pest
 
-# quick checks
-grep -n "&NEWRUN" -n log_chease | head -n 5 || true
-grep -n "EQDSK" log_chease | head -n 50 || true
-ls -l OUTRMAR OUTVMAR 2>/dev/null || true
-tail -n 60 log_chease
+echo "=== CHEASE: NEQDSK=1, NSURF=6, NVEXP=0 (smoothed boundary) ==="
+$CHEASE < datain_PEST > log_chease_pest 2>&1
+
+# Report
+if grep -q "ZERO PIVOT" log_chease_pest; then
+  echo "WARNING: ZERO PIVOT detected"
+  grep "ZERO PIVOT" log_chease_pest
+fi
+if grep -q "CONJUGATE GRADIENT NOT CONVERGED" log_chease_pest; then
+  echo "WARNING: CG not converged"
+fi
+
+echo ""
+echo "=== Output check ==="
+for f in OUTRMAR OUTVMAR EXPEQ.OUT; do
+  if [ -f "$f" ]; then
+    echo "  $f : $(wc -c < $f) bytes"
+  else
+    echo "  $f : MISSING"
+  fi
+done
+
+echo ""
+if [ ! -f OUTRMAR ] || [ ! -f OUTVMAR ]; then
+  echo "KSTAR PEST: INCOMPLETE — check log_chease_pest"
+  tail -15 log_chease_pest
+  exit 1
+fi
+
+echo "Pass 1 (PEST equilibrium): OK"
+grep "GEXP\|Q_ZERO\|Q_EDGE\|I0EXP\|BETAN" log_chease_pest 2>/dev/null || true
+
+
+# Before Pass 2 (PANGLE_PEST)
+cp -f OUTRMAR OUTRMAR_PEST    # save Pass 1 output first
+cp -f OUTVMAR OUTVMAR_PEST
+rm -f OUTRMAR OUTVMAR PANGLE.OUT   # clear for Pass 2
+
+# Before Pass 3 (PANGLE_GEOM)
+rm -f OUTRMAR OUTVMAR PANGLE.OUT   # clear for Pass 3
+
+# ============================================================
+# Pass 2: NEGP=0, NER=2, NPLOT=1 → PANGLE.OUT (PEST/SFL)
+#   Re-solve from EXPEQ.OUT to get PANGLE.OUT
+# ============================================================
+cp -f EXPEQ.OUT EXPEQ
+
+cat > datain_PEST <<'EOF'
+***                                                                             
+***    KSTAR 28957: PANGLE — PEST coords (NEGP=0, NER=2)                         
+***                                                                             
+***                                                                             
+ &EQDATA                                                                        
+   NBLOPT=0, CFBAL=1.00000, NEQDSK=0,
+   NIDEAL=0, NSURF=6, NTCASE=0, NSYM=0,
+   NCSCAL=2, CURRT=0.20914, CSSPEC=0.000,
+   CPRESS=1.00, PSISCL=1.00,
+   NSTTP=2, NFUNC=4, NIPR=1, NISO=240,
+   NPPFUN=4, NPP=1, NPPR=30,
+   NSOUR=2, NPROPT=2,
+   NSMOOTH=0, NDIFPS=1, NDIFT=1,
+   NS=60, NT=60, NPSI=240, NCHI=200,
+   NV=160, NVEXP=0, REXT=5.0, R0W=0.90, RZ0W=0.0,
+   NMESHA=3, SOLPDA=0.50, QWIDTH0=0.40, ROTE=0.0000, NTOR=1,
+   NPOIDQ=5, QSHAVE=100.0,
+   QPLACE(1)=2.0,3.0,4.0,5.0,6.0,7.0,8.0,
+   QWIDTH(1)=0.0100,0.0080,0.0060,0.0040,0.0020,0.0010,0.0010,
+   NEGP=0, NER=2,
+   EPSLON=1.0E-10, GAMMA=1.6666666667,
+   MSMAX=40, NINMAP=20, NINSCA=50,
+   NTURN=10, NBLC0=1,
+   NOPT=0, NPLOT=1, NBAL=0, NTMF0=0, NRSCAL=0,
+   B0EXP=1.69271887, R0EXP=1.80,
+ &END                                                                           
+ &NEWRUN
+ &END
+EOF
+
+echo ""
+echo "=== Pass 2: NEQDSK=0, NEGP=0, NER=2, NPLOT=1 (PANGLE_PEST) ==="
+rm -f PANGLE.OUT
+$CHEASE < datain_PEST > log_chease_pest_pangle 2>&1
+
+if [ -f PANGLE.OUT ]; then
+  cp -f PANGLE.OUT PANGLE_PEST
+  echo "  PANGLE.OUT -> PANGLE_PEST ($(wc -c < PANGLE_PEST) bytes)"
+else
+  echo "  WARNING: PANGLE.OUT not produced — check log_chease_pest_pangle"
+fi
+
+# ============================================================
+# Pass 3: NEGP=-1, NER=1, NPLOT=1 → PANGLE.OUT (geometric)
+# ============================================================
+cp -f EXPEQ.OUT EXPEQ
+
+cat > datain_GEOM <<'EOF'
+***                                                                             
+***    KSTAR 28957: PANGLE — geometric coords (NEGP=-1, NER=1)                   
+***                                                                             
+***                                                                             
+ &EQDATA                                                                        
+   NBLOPT=0, CFBAL=1.00000, NEQDSK=0,
+   NIDEAL=0, NSURF=6, NTCASE=0, NSYM=0,
+   NCSCAL=2, CURRT=0.20914, CSSPEC=0.000,
+   CPRESS=1.00, PSISCL=1.00,
+   NSTTP=2, NFUNC=4, NIPR=1, NISO=240,
+   NPPFUN=4, NPP=1, NPPR=30,
+   NSOUR=2, NPROPT=2,
+   NSMOOTH=0, NDIFPS=1, NDIFT=1,
+   NS=60, NT=60, NPSI=240, NCHI=200,
+   NV=160, NVEXP=0, REXT=5.0, R0W=0.90, RZ0W=0.0,
+   NMESHA=3, SOLPDA=0.50, QWIDTH0=0.40, ROTE=0.0000, NTOR=1,
+   NPOIDQ=5, QSHAVE=100.0,
+   QPLACE(1)=2.0,3.0,4.0,5.0,6.0,7.0,8.0,
+   QWIDTH(1)=0.0100,0.0080,0.0060,0.0040,0.0020,0.0010,0.0010,
+   NEGP=-1, NER=1,
+   EPSLON=1.0E-10, GAMMA=1.6666666667,
+   MSMAX=40, NINMAP=20, NINSCA=50,
+   NTURN=10, NBLC0=1,
+   NOPT=0, NPLOT=1, NBAL=0, NTMF0=0, NRSCAL=0,
+   B0EXP=1.69271887, R0EXP=1.80,
+ &END                                                                           
+ &NEWRUN
+ &END
+EOF
+
+echo ""
+echo "=== Pass 3: NEQDSK=0, NEGP=-1, NER=1, NPLOT=1 (PANGLE_GEOM) ==="
+rm -f PANGLE.OUT
+$CHEASE < datain_GEOM > log_chease_geom 2>&1
+
+if [ -f PANGLE.OUT ]; then
+  cp -f PANGLE.OUT PANGLE_GEOM
+  echo "  PANGLE.OUT -> PANGLE_GEOM ($(wc -c < PANGLE_GEOM) bytes)"
+else
+  echo "  WARNING: PANGLE.OUT not produced — check log_chease_geom"
+fi
+
+# ============================================================
+# Final summary
+# ============================================================
+echo ""
+echo "========================================="
+echo "  CHEASE output files for MARS-F RmpLin"
+echo "========================================="
+ALL_OK=true
+for f in OUTRMAR_PEST OUTVMAR_PEST PANGLE_PEST PANGLE_GEOM; do
+  if [ -f "$f" ]; then
+    printf "  %-16s : %s bytes\n" "$f" "$(wc -c < $f)"
+  else
+    printf "  %-16s : MISSING\n" "$f"
+    ALL_OK=false
+  fi
+done
+
+echo ""
+if [ "$ALL_OK" = true ]; then
+  echo "ALL FILES READY for MARS-F RmpLin."
+  echo ""
+  echo "MARS-F workflow (from YQ Liu memo):"
+  echo "  1. cp OUTRMAR_PEST OUTRMAR; cp OUTVMAR_PEST OUTVMAR"
+  echo "  2. Run MARS with NCONVB1=1, NCONVCS=0 + PANGLE_PEST"
+  echo "     → save output PANGLE.OUT as PANGLE_PEST"
+  echo "  3. Run MARS with NCONVB1=1, NCONVCS=1 + PANGLE_GEOM"
+  echo "     → save output PANGLE.OUT as PANGLE_GEOM"
+  echo "  4. Run MARS vacuum/plasma response with NCONVB1=2, NCONVCS=1"
+  rm -f EQU0? ETAVAC INP1* JACOB_F JSOLVER NDES NGA NOUT NSAVE RZPEEL
+else
+  echo "INCOMPLETE — check log files"
+fi

@@ -1,0 +1,135 @@
+#!/bin/bash
+set -euo pipefail
+
+CHEASE="../../../CheaseMerge/chease.x"
+GFILE="g028957_smooth.004300"
+
+# ============================================================
+# Pass 1: NEQDSK=1, NEGP=0, NER=2, NPLOT=1  (PEST/SFL)
+#   → OUTRMAR, OUTVMAR, PANGLE.OUT
+# ============================================================
+echo "=== Pass 1: NEQDSK=1, NEGP=0, NER=2, NPLOT=1 (PEST) ==="
+rm -f OUTRMAR OUTVMAR PANGLE.OUT EXPEQ EXPEQ.OUT
+
+cp "$GFILE" EXPEQ
+
+cat > datain_pest <<'EOF'
+***                                                                             
+***    KSTAR 28957: Pass 1 — PEST coords (NEGP=0, NER=2, NPLOT=1)              
+***                                                                             
+***                                                                             
+ &EQDATA                                                                        
+   NBLOPT=0, CFBAL=1.00000, NEQDSK=1,
+   NIDEAL=0, NSURF=6, NTCASE=0, NSYM=0,
+   NCSCAL=2, CURRT=0.20914, CSSPEC=0.000,
+   CPRESS=1.00, PSISCL=1.00,
+   NSTTP=2, NFUNC=4, NIPR=1, NISO=240,
+   NPPFUN=4, NPP=1, NPPR=30,
+   NSOUR=2, NPROPT=2,
+   NSMOOTH=0, NDIFPS=1, NDIFT=1,
+   NS=60, NT=60, NPSI=240, NCHI=200,
+   NV=160, NVEXP=0, REXT=5.0, R0W=0.90, RZ0W=0.0,
+   NMESHA=3, SOLPDA=0.50, QWIDTH0=0.40, ROTE=0.0000, NTOR=1,
+   NPOIDQ=5, QSHAVE=100.0,
+   QPLACE(1)=2.0,3.0,4.0,5.0,6.0,7.0,8.0,
+   QWIDTH(1)=0.0100,0.0080,0.0060,0.0040,0.0020,0.0010,0.0010,
+   NEGP=0, NER=2,
+   EPSLON=1.0E-10, GAMMA=1.6666666667,
+   MSMAX=40, NINMAP=20, NINSCA=50,
+   NTURN=10, NBLC0=1,
+   NOPT=0, NPLOT=1, NBAL=0, NTMF0=0, NRSCAL=0,
+   B0EXP=1.69271887, R0EXP=1.80,
+ &END                                                                           
+ &NEWRUN
+ &END
+EOF
+
+$CHEASE < datain_pest > log_chease_pest_pangle 2>&1
+
+echo "=== Pass 1 output ==="
+for f in OUTRMAR OUTVMAR PANGLE.OUT; do
+  if [ -f "$f" ]; then
+    printf "  %-14s : %s bytes\n" "$f" "$(wc -c < $f)"
+  else
+    printf "  %-14s : MISSING\n" "$f"
+  fi
+done
+
+# Save PEST outputs
+[ -f OUTRMAR ]    && cp -f OUTRMAR OUTRMAR_PEST
+[ -f OUTVMAR ]    && cp -f OUTVMAR OUTVMAR_PEST
+[ -f PANGLE.OUT ] && cp -f PANGLE.OUT PANGLE_PEST
+
+# ============================================================
+# Pass 2: NEQDSK=1, NEGP=-1, NER=1, NPLOT=1  (geometric)
+#   → PANGLE.OUT only (OUTRMAR/OUTVMAR same, just need PANGLE)
+# ============================================================
+echo ""
+echo "=== Pass 2: NEQDSK=1, NEGP=-1, NER=1, NPLOT=1 (GEOM) ==="
+rm -f OUTRMAR OUTVMAR PANGLE.OUT EXPEQ EXPEQ.OUT
+
+cp "$GFILE" EXPEQ
+
+cat > datain_geom <<'EOF'
+***                                                                             
+***    KSTAR 28957: Pass 2 — geometric coords (NEGP=-1, NER=1, NPLOT=1)        
+***                                                                             
+***                                                                             
+ &EQDATA                                                                        
+   NBLOPT=0, CFBAL=1.00000, NEQDSK=1,
+   NIDEAL=0, NSURF=6, NTCASE=0, NSYM=0,
+   NCSCAL=2, CURRT=0.20914, CSSPEC=0.000,
+   CPRESS=1.00, PSISCL=1.00,
+   NSTTP=2, NFUNC=4, NIPR=1, NISO=240,
+   NPPFUN=4, NPP=1, NPPR=30,
+   NSOUR=2, NPROPT=2,
+   NSMOOTH=0, NDIFPS=1, NDIFT=1,
+   NS=60, NT=60, NPSI=240, NCHI=200,
+   NV=160, NVEXP=0, REXT=5.0, R0W=0.90, RZ0W=0.0,
+   NMESHA=3, SOLPDA=0.50, QWIDTH0=0.40, ROTE=0.0000, NTOR=1,
+   NPOIDQ=5, QSHAVE=100.0,
+   QPLACE(1)=2.0,3.0,4.0,5.0,6.0,7.0,8.0,
+   QWIDTH(1)=0.0100,0.0080,0.0060,0.0040,0.0020,0.0010,0.0010,
+   NEGP=-1, NER=1,
+   EPSLON=1.0E-10, GAMMA=1.6666666667,
+   MSMAX=40, NINMAP=20, NINSCA=50,
+   NTURN=10, NBLC0=1,
+   NOPT=0, NPLOT=1, NBAL=0, NTMF0=0, NRSCAL=0,
+   B0EXP=1.69271887, R0EXP=1.80,
+ &END                                                                           
+ &NEWRUN
+ &END
+EOF
+
+$CHEASE < datain_geom > log_chease_geom_pangle 2>&1
+
+if [ -f PANGLE.OUT ]; then
+  cp -f PANGLE.OUT PANGLE_GEOM
+  echo "  PANGLE.OUT -> PANGLE_GEOM ($(wc -c < PANGLE_GEOM) bytes)"
+else
+  echo "  WARNING: PANGLE_GEOM not produced — check log_chease_geom_pangle"
+fi
+
+# ============================================================
+# Summary
+# ============================================================
+echo ""
+echo "========================================="
+echo "  CHEASE output files for MARS-F RmpLin"
+echo "========================================="
+ALL_OK=true
+for f in OUTRMAR_PEST OUTVMAR_PEST PANGLE_PEST PANGLE_GEOM; do
+  if [ -f "$f" ]; then
+    printf "  %-16s : %s bytes\n" "$f" "$(wc -c < $f)"
+  else
+    printf "  %-16s : MISSING\n" "$f"
+    ALL_OK=false
+  fi
+done
+
+echo ""
+if [ "$ALL_OK" = true ]; then
+  echo "ALL FILES READY for MARS-F RmpLin."
+else
+  echo "INCOMPLETE — check log files"
+fi
